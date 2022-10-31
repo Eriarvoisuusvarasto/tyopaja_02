@@ -1,0 +1,1566 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Ternary plot of hashtag growth in RoomClip</title>
+<link rel="stylesheet" type="text/css" href="./inspector.css">
+<body>
+<script type="module">
+
+
+import {Runtime, Library, Inspector} from "./runtime.js";
+
+const runtime = new Runtime();
+const main = runtime.module(define, Inspector.into(document.body));
+// https://observablehq.com/@yasuhirohashimoto/ternary_plot_of_hashtag_growth@448
+import define1 from "./ba71f1bcb80e011e@346.js";
+import define2 from "./10484e7a82af53ba@3467.js";
+
+function _time_scale(Inputs){return(
+Inputs.select(
+  new Map([
+    ["7 days", 1],
+    ["14 days", 2],
+    ["28 days", 3]
+  ]),
+  { value: 1, label: "Unit time" }
+)
+)}
+
+function _drawScatterTernaryPlot(width,DOM,d3,scatterTernaryPlot,axisLabels,grid,ticks,data,dot_color,time_threshold,col)
+{
+  const height = width / 2;
+  const node = DOM.svg(width, height);
+  const svg = d3.select(node);
+
+  const radius = scatterTernaryPlot.radius();
+
+  const chart = svg
+    .append("g")
+    .attr("transform", `translate(${width / 2} ${height / 1.55})`)
+    .attr("font-family", "sans-serif")
+    .attr("id", "chart")
+    .on("mousemove", handleMouseMove);
+
+  const defs = chart.append("defs");
+
+  const clipPath = defs
+    .append("clipPath")
+    .attr("id", "trianglePath")
+    .append("path")
+    .attr("d", scatterTernaryPlot.triangle());
+
+  const axisLabelsGroups = chart
+    .append("g")
+    .attr("class", "axis-labels")
+    .append("g")
+    .attr("class", "labels")
+    .attr("font-size", 16);
+
+  axisLabelsGroups.call(axisLabels, scatterTernaryPlot.axisLabels());
+
+  const gridLinesPaths = scatterTernaryPlot
+    .gridLines()
+    .map((axisGrid) => axisGrid.map(d3.line()).join(" "));
+
+  const gridGroup = chart
+    .append("g")
+    .attr("class", "grid")
+    .call(grid, gridLinesPaths);
+
+  const axisTicksGroups = chart
+    .append("g")
+    .attr("class", "ternary-ticks")
+    .attr("font-size", 10)
+    .selectAll("g")
+    .data(scatterTernaryPlot.ticks())
+    .join("g")
+    .attr("class", "axis-ticks")
+    .call(ticks);
+
+  const ternaryData = data.map((d) => {
+    const [x, y] = scatterTernaryPlot(d);
+    return { x, y, ...d };
+  });
+
+  // data
+  const dots = chart
+    .append("g")
+    .attr("class", "data")
+    .attr("clip-path", "url(#trianglePath)")
+    .selectAll("circle")
+    .data(ternaryData)
+    .join("circle")
+    //.attr("r", 4)
+    .attr("r", (d) => 2 + 0.01 * Math.sqrt(d.N))
+    .attr("cx", (d) => d.x)
+    .attr("cy", (d) => d.y)
+    //.attr("fill", "#444")
+    .attr("fill", (d) => dot_color(d3.timeDay.count(data[0].time, d.time)))
+    .attr("opacity", 0.5)
+    .attr("stroke", "#ddd")
+    .attr("display", (d) =>
+      time_threshold.range[0] <= d.time && d.time <= time_threshold.range[1]
+        ? undefined
+        : "none"
+    );
+
+  dots
+    .append("title")
+    .text(
+      (d) =>
+        `${d.word}: N) ${d3.format(".1f")(
+          100 * (1 - d[col._1] - d[col._2])
+        )}%, S) ${d3.format(".1f")(100 * d[col._1])}%, F) ${d3.format(".1f")(
+          100 * d[col._2]
+        )}%`
+    );
+
+  function zoomed({ transform }) {
+    const { x, y, k } = transform;
+
+    const tx = x / radius,
+      ty = y / radius;
+
+    // apply transform
+    scatterTernaryPlot.translate([tx, ty]);
+    scatterTernaryPlot.scale(k);
+
+    const zoomedDomains = scatterTernaryPlot.domainsFromVertices();
+
+    scatterTernaryPlot.setDomains(zoomedDomains);
+
+    // update data
+    dots
+      .attr("cx", (d) => scatterTernaryPlot(d)[0])
+      .attr("cy", (d) => scatterTernaryPlot(d)[1]);
+
+    // update gridlines and ticks
+    const gridLinesPaths = scatterTernaryPlot
+      .gridLines()
+      .map((axisGrid) => axisGrid.map(d3.line()).join(" "));
+
+    gridGroup.call(grid, gridLinesPaths);
+
+    axisTicksGroups.data(scatterTernaryPlot.ticks()).call(ticks, (d) => d);
+
+    const zoomedVertices = scatterTernaryPlot.vertices();
+
+    const newTrianglePath = `M${zoomedVertices[0]}L${zoomedVertices[1]}L${zoomedVertices[2]}Z`;
+  }
+
+  function handleMouseMove(d) {
+    const xy = d3.pointer(d);
+    const inverse = scatterTernaryPlot.invert(xy);
+
+    node.dispatchEvent(new CustomEvent("input"), { bubbles: true });
+    node.value = inverse;
+  }
+
+  node.value = 0;
+
+  return svg.node();
+}
+
+function _time_threshold(rangeSlider,data){return(
+rangeSlider(data, (d) => d.time)
+)}
+
+function _colorHexbinTernaryPlot(width,DOM,d3,hexBinTernaryPlot,axisLabels,grid,ticks,bins,hexbin,hex_color,col)
+{
+  const height = width / 2;
+  const node = DOM.svg(width, height);
+  const svg = d3.select(node);
+  const chart = svg
+    .append("g")
+    .attr("transform", `translate(${width / 2} ${height / 1.55})`)
+    .attr("height", 300)
+    .attr("font-family", "sans-serif")
+    .attr("id", "chart");
+
+  const defs = chart.append("defs");
+
+  defs
+    .append("clipPath")
+    .attr("id", "trianglePath")
+    .append("path")
+    .attr("d", hexBinTernaryPlot.triangle());
+
+  const axisLabelsGroup = chart
+    .append("g")
+    .attr("class", "axis-labels")
+    .call(axisLabels, hexBinTernaryPlot.axisLabels());
+
+  const gridLinesPaths = hexBinTernaryPlot
+    .gridLines()
+    .map((axisGrid) => axisGrid.map(d3.line()).join(" "));
+
+  const gridGroup = chart
+    .append("g")
+    .attr("class", "grid")
+    .call(grid, gridLinesPaths);
+
+  const axisTicksGroups = chart
+    .append("g")
+    .attr("class", "ternary-ticks")
+    .attr("font-size", 10)
+    .selectAll("g")
+    .data(hexBinTernaryPlot.ticks())
+    .join("g")
+    .attr("class", "axis-ticks");
+
+  axisTicksGroups.call(ticks);
+  // color-coded hexbins
+  chart
+    .append("g")
+    .attr("stroke", "#000")
+    .attr("stroke-opacity", 0.1)
+    .attr("clip-path", "url(#trianglePath)")
+    .selectAll("path")
+    .data(bins)
+    .join("path")
+    .attr("d", hexbin.hexagon())
+    .attr("transform", (d) => `translate(${d.x},${d.y})`)
+    .attr("fill", (d) => hex_color(d.length))
+    .append("title")
+    .text((d) =>
+      d
+        .map(
+          (e) =>
+            `${e.word}: N) ${d3.format(".1f")(
+              100 * (1 - e[col._1] - e[col._2])
+            )}%, S) ${d3.format(".1f")(100 * e[col._1])}%, F) ${d3.format(
+              ".1f"
+            )(100 * e[col._2])}%`
+        )
+        .join("\n")
+    );
+
+  return node;
+}
+
+
+function _hexagonRadius(Inputs){return(
+Inputs.range([3, 20], {
+  step: 0.5,
+  label: "Hexagon radius",
+  value: 8
+})
+)}
+
+function _hex_color(d3,bins){return(
+d3
+  //.scaleSequential(d3.interpolateViridis)
+  .scaleSequential(d3.interpolateBuPu)
+  .domain([0, d3.max(bins, (d) => d.length) / 2])
+)}
+
+function _dot_color(d3,data){return(
+d3
+  .scaleSequential(d3.interpolateSpectral)
+  .domain([
+    d3.max(data, (d) => d3.timeDay.count(data[0].time, d.time)) - 900,
+    0
+  ])
+)}
+
+function _normalBarycentric(barycentric,col)
+{
+  return barycentric()
+    .a((d) => 1 - (+d[col._1] + +d[col._2]))
+    .b((d) => +d[col._1])
+    .c((d) => +d[col._2]);
+}
+
+
+function _scatterTernaryPlot(ternaryPlot,normalBarycentric,width,labels){return(
+ternaryPlot(normalBarycentric)
+  .radius(width / 4)
+  .labels(labels)
+)}
+
+function _hexBinTernaryPlot(ternaryPlot,normalBarycentric,labels){return(
+ternaryPlot(normalBarycentric).labels(labels)
+)}
+
+function _hexbin(d3,hexagonRadius,width){return(
+d3
+  .hexbin()
+  .x((d) => d.x)
+  .y((d) => d.y)
+  .radius((hexagonRadius * width) / (width / 2 - 1))
+)}
+
+function _bins(hexbin,xydata){return(
+hexbin(xydata)
+)}
+
+function _col(time_scale){return(
+time_scale == 1
+  ? {
+      _1: "lower-deviation-ratio_7",
+      _2: "upper-deviation-ratio_7"
+    }
+  : time_scale == 2
+  ? {
+      _1: "lower-deviation-ratio_14",
+      _2: "upper-deviation-ratio_14"
+    }
+  : time_scale == 3
+  ? {
+      _1: "lower-deviation-ratio_28",
+      _2: "upper-deviation-ratio_28"
+    }
+  : null
+)}
+
+function _data(FileAttachment){return(
+FileAttachment("ternary_data@4.tsv")
+  .tsv()
+  .then((d) => d.map((d) => Object.assign(d, { time: new Date(d.time) })))
+)}
+
+function _xydata(data,hexBinTernaryPlot){return(
+data.map((d) => {
+  const [x, y] = hexBinTernaryPlot(d);
+
+  return Object.assign({ x, y }, d);
+})
+)}
+
+function _labels(){return(
+["Normal", "Slow", "Fast"]
+)}
+
+function _ternaryPlot(width,lineBetween,d3,getDomainLengths,getSlope,parallelLinesDistance,epsilon,getTranslateCorrections,insideDomain){return(
+function ternaryPlot(barycentric) {
+  let radius = width / 4,
+    k = 1, // scale
+    tx = 0, // translate
+    ty = 0,
+    tickFormat = "%",
+    reverse = false;
+
+  let unscaledVertices = barycentric.vertices(); // original unscaled vertices
+
+  // return this function, has access to all closed over variables in the parent 'ternaryPlot' function
+  function ternaryPlot(_) {
+    const [x, y] = barycentric(_);
+
+    return [x * radius, y * radius];
+  }
+
+  let [svA, svB, svC] = scaleVertices();
+
+  // axes configurations
+  // domain from vC (angle: 30°) to vA (angle: -90°)
+  let A = {
+    label: "A",
+    labelAngle: 0,
+    labelOffset: 45, // 🤔💭 or relative to radius? labelOffset: radius / 10
+    gridLine: lineBetween(svC, svA),
+    scale: d3.scaleLinear().domain([0, 1]),
+    tickAngle: 0,
+    tickSize: 6,
+    tickTextAnchor: "start"
+  };
+
+  // domain from svA (angle: -90°) to svB (angle: 150°)
+  let B = {
+    label: "B",
+    labelAngle: 60,
+    labelOffset: 45,
+    gridLine: lineBetween(svA, svB),
+    scale: d3.scaleLinear().domain([0, 1]),
+    tickAngle: 60,
+    tickSize: 6,
+    tickTextAnchor: "end"
+  };
+
+  // domain from vB (angle: 150°) to vC (angle: 30°)
+  let C = {
+    label: "C",
+    labelAngle: -60,
+    labelOffset: 45,
+    gridLine: lineBetween(svB, svC),
+    scale: d3.scaleLinear().domain([0, 1]),
+    tickAngle: -60,
+    tickSize: 6,
+    tickTextAnchor: "end"
+  };
+
+  // just a nicety for the gridlines function
+  A.conjugate = B;
+  B.conjugate = C;
+  C.conjugate = A;
+
+  ternaryPlot.vertices = scaleVertices;
+
+  function scaleVertices(newScaledVertices) {
+    if (newScaledVertices) {
+      const newUnscaledVertices = newScaledVertices.map(([x, y]) => [
+        x / radius,
+        y / radius
+      ]);
+
+      barycentric.vertices(newUnscaledVertices);
+
+      return ternaryPlot;
+    }
+
+    const scaledVertices = barycentric
+      .vertices()
+      .map(([x, y]) => [x * radius, y * radius]);
+
+    return scaledVertices;
+  }
+
+  // returns array of objects with coords, rotation and label text for plot
+  ternaryPlot.axisLabels = function ({ center = false } = {}) {
+    return [A, B, C].map((d) => {
+      const { label, labelAngle } = d;
+      const [x, y] = d.gridLine(center ? 0.5 : 1);
+      const position = [
+        (x / radius) * (radius + d.labelOffset),
+        (y / radius) * (radius + d.labelOffset)
+      ];
+
+      return {
+        position,
+        label,
+        angle: labelAngle
+      };
+    });
+  };
+
+  // set domains without applying matching transform
+  ternaryPlot.setDomains = function (_) {
+    const [domainA, domainB, domainC] = _;
+
+    A.scale.domain(domainA.map(Number));
+    B.scale.domain(domainB.map(Number));
+    C.scale.domain(domainC.map(Number));
+
+    return ternaryPlot;
+  };
+
+  ternaryPlot.reverseVertices = function () {
+    // 'swap' vertices clockwise
+    reverse = true;
+    const swappedVertices = [svC, svA, svB];
+    const [vA, vB, vC] = unscaledVertices;
+    // [vC, vA, vB]
+    unscaledVertices = [vC, vA, vB]; // needed for .transform() and transformFromDomains() & .domainsFromVertices() to work
+    ternaryPlot.vertices(swappedVertices);
+
+    // swap gridLines
+    A.gridLine = lineBetween(svA, svC);
+    B.gridLine = lineBetween(svB, svA);
+    C.gridLine = lineBetween(svC, svB);
+
+    return ternaryPlot;
+  };
+
+  // set domains checks if domains are reversed and applies appropriate transform
+  ternaryPlot.domains = function (_) {
+    if (!arguments.length)
+      return [A.scale.domain(), B.scale.domain(), C.scale.domain()];
+
+    const domainLengths = getDomainLengths(_);
+
+    if (domainLengths.size !== 1) {
+      throw new Error("Length of domains must be all be equal");
+    }
+
+    const isReverseDomain = _.every((d) => d[0] > d[1]);
+
+    if (isReverseDomain) {
+      ternaryPlot.reverseVertices(_);
+    } else {
+      reverse = false; // in case domains switch from reverse to normal
+    }
+
+    ternaryPlot.setDomains(_);
+
+    // Get transform corresponding to this domain
+    const { x, y, k } = ternaryPlot.transformFromDomains(_);
+
+    // Set and apply transform ie update barycentric coord system
+    ternaryPlot.translate([x, y]);
+    ternaryPlot.scale(k);
+
+    return ternaryPlot;
+  };
+
+  ternaryPlot.gridLines = function (counts = 20) {
+    return [A, B, C].map((axis, i) => {
+      const gridCount = Array.isArray(counts) ? +counts[i] : +counts;
+      const gridValues = axis.scale.ticks(gridCount - 1); // I forgot what the -1 was for
+
+      return gridValues.map((d) => [
+        axis.gridLine(axis.scale(d)),
+        axis.conjugate.gridLine(1 - axis.scale(d))
+      ]);
+    });
+  };
+
+  ternaryPlot.ticks = function (counts = 10) {
+    return [A, B, C].map((axis, i) => {
+      const tickCount = Array.isArray(counts) ? +counts[i] : +counts;
+      const tickValues = axis.scale.ticks(tickCount); //
+
+      const format =
+        typeof tickFormat === "function"
+          ? tickFormat
+          : axis.scale.tickFormat(tickCount, tickFormat);
+
+      return tickValues.map((tick) => {
+        const tickPos = reverse ? 1 - axis.scale(tick) : axis.scale(tick); // not a fan of this
+        return {
+          tick: format(tick),
+          position: axis.gridLine(tickPos),
+          angle: axis.tickAngle,
+          size: axis.tickSize,
+          textAnchor: axis.tickTextAnchor
+        };
+      });
+    });
+  };
+
+  ternaryPlot.tickAngles = function (_) {
+    return arguments.length
+      ? ((A.tickAngle = _[0]),
+        (B.tickAngle = _[1]),
+        (C.tickAngle = _[2]),
+        ternaryPlot)
+      : [A.tickAngle, B.tickAngle, C.tickAngle];
+  };
+
+  ternaryPlot.tickSizes = function (_) {
+    return arguments.length
+      ? !Array.isArray(_)
+        ? ((A.tickSize = B.tickSize = C.tickSize = +_), ternaryPlot)
+        : ((A.tickSize = _[0]),
+          (B.tickSize = _[1]),
+          (C.tickSize = _[2]),
+          ternaryPlot)
+      : [A.tickSize, B.tickSize, C.tickSize];
+  };
+
+  ternaryPlot.tickFormat = function (_) {
+    return arguments.length ? ((tickFormat = _), ternaryPlot) : tickFormat;
+  };
+
+  ternaryPlot.tickTextAnchors = function (_) {
+    return arguments.length
+      ? ((A.tickTextAnchor = _[0]),
+        (B.tickTextAnchor = _[1]),
+        (C.tickTextAnchor = _[2]),
+        ternaryPlot)
+      : [A.tickTextAnchor, B.tickTextAnchor, C.tickTextAnchor];
+  };
+
+  ternaryPlot.labels = function (_) {
+    return arguments.length
+      ? ((A.label = _[0]), (B.label = _[1]), (C.label = _[2]), ternaryPlot)
+      : [A.label, B.label, C.label];
+  };
+
+  ternaryPlot.labelAngles = function (_) {
+    return arguments.length
+      ? ((A.labelAngle = _[0]),
+        (B.labelAngle = _[1]),
+        (C.labelAngle = _[2]),
+        ternaryPlot)
+      : [A.labelAngle, B.labelAngle, C.labelAngle];
+  };
+
+  ternaryPlot.labelOffsets = function (_) {
+    return arguments.length
+      ? ((A.labelOffset = _[0]),
+        (B.labelOffset = _[1]),
+        (C.labelOffset = _[2]),
+        ternaryPlot)
+      : [A.labelOffset, B.labelOffset, C.labelOffset];
+  };
+
+  ternaryPlot.triangle = function () {
+    // 🚨 todo: use d3-path or d3-line for canvas support
+    return `M${svA}L${svB}L${svC}Z`;
+  };
+
+  ternaryPlot.radius = function (_) {
+    if (!arguments.length) return radius;
+
+    radius = +_;
+
+    [svA, svB, svC] = ternaryPlot.vertices(); // scaled vertices for drawing gridlines and axis labels
+
+    // 🤔💭 Make a function for setting gridlines?
+    A.gridLine = lineBetween(svC, svA);
+    B.gridLine = lineBetween(svA, svB);
+    C.gridLine = lineBetween(svB, svC);
+
+    return ternaryPlot;
+  };
+
+  // sets the scale
+  ternaryPlot.scale = function (_) {
+    return arguments.length
+      ? ((k = +_), ternaryPlot.transform(), ternaryPlot)
+      : k;
+  };
+
+  // sets x and y translation
+  ternaryPlot.translate = function (_) {
+    return arguments.length
+      ? ((tx = _[0]), (ty = _[1]), ternaryPlot.transform(), ternaryPlot)
+      : [tx, ty];
+  };
+
+  ternaryPlot.invert = function (_) {
+    const xy = [_[0] / radius, _[1] / radius];
+    const inverted = barycentric.invert(xy);
+
+    return inverted;
+  };
+
+  // apply scale and translate to vertices
+  ternaryPlot.transform = function () {
+    if (k === 1) {
+      tx = 0;
+      ty = 0;
+      return ternaryPlot;
+    }
+
+    const [vA, vB, vC] = unscaledVertices;
+    const [newvA, newvB, newvC] = unscaledVertices.map(([vx, vy]) => [
+      vx * k + tx,
+      vy * k + ty
+    ]); // these are the newly transformed vertices BEFORE checking if they within bounds of original triangle
+
+    const mAB = getSlope(vA, vB),
+      mAC = getSlope(vA, vC),
+      mBC = getSlope(vB, vC);
+
+    // y-intercepts of zoomed triangle sides
+    const bAB = newvA[1] - mAB * newvA[0],
+      bAC = newvA[1] - mAC * newvA[0],
+      bBC = newvB[1] - mBC * newvB[0]; // or newvC[0]
+
+    const lineDistanceAC = parallelLinesDistance(vA[1], bAC, mAC),
+      lineDistanceAB = reverse // don't like this solution
+        ? parallelLinesDistance(vB[1], bAB, mAB)
+        : parallelLinesDistance(vA[1], bAB, mAB),
+      lineDistanceBC = parallelLinesDistance(vB[1], bBC, mBC);
+
+    if (lineDistanceAB < -epsilon) {
+      const [correctionX, correctionY] = getTranslateCorrections(
+        mAB,
+        lineDistanceAB
+      );
+      tx += correctionX;
+      ty += correctionY;
+    }
+
+    if (lineDistanceAC < -epsilon) {
+      const [correctionX, correctionY] = getTranslateCorrections(
+        mAC,
+        lineDistanceAC
+      );
+
+      tx += correctionX;
+      ty += correctionY;
+    }
+
+    if (lineDistanceBC < -epsilon) {
+      const [correctionX, correctionY] = getTranslateCorrections(
+        mBC,
+        lineDistanceBC
+      );
+
+      tx += correctionX;
+      ty += correctionY;
+    }
+
+    // apply scale & adjusted translations
+    const transformedVertices = unscaledVertices.map(([vx, vy]) => [
+      vx * k + tx,
+      vy * k + ty
+    ]);
+
+    barycentric.vertices(transformedVertices); // update barycentic coordinates
+
+    return ternaryPlot;
+  };
+
+  // something like a static method
+  // or call transform from this function?
+  ternaryPlot.transformFromDomains = function (domains) {
+    const [domainA, domainB, domainC] = domains;
+    const domainLengths = getDomainLengths(domains);
+
+    const domainLength = [...domainLengths][0];
+
+    const [uvA, uvB, uvC] = unscaledVertices;
+
+    const k = 1 / domainLength;
+    const domainFromScale = (k) => (k - 1) / (k * 3); // find start value of centered, untranslated domain for this scale
+
+    const untranslatedDomainStart = domainFromScale(k);
+    // const untranslatedDomain = [domainFromScale(k), 1 - 2 * domainFromScale(k)]
+
+    const shiftA = untranslatedDomainStart - domainA[0],
+      shiftB = untranslatedDomainStart - domainB[0],
+      shiftC = untranslatedDomainStart - domainC[0];
+
+    const [tx, ty] = [
+      uvA[0] * shiftA + uvB[0] * shiftB + uvC[0] * shiftC,
+      uvA[1] * shiftA + uvB[1] * shiftB + uvC[1] * shiftC
+    ].map((d) => d * k);
+
+    return { k, x: tx, y: ty };
+  };
+
+  // get barycentric value of initial vertices to updated vertices
+  ternaryPlot.domainsFromVertices = function () {
+    // 'vertices' is an array the original unscaled, untranslated vertices here
+    // find their barycentric values in the transformed barycentric coordinate system
+    // assumes barycentic coord system is already transformed
+    const [bA, bB, bC] = unscaledVertices.map(barycentric.invert);
+
+    const newADomain = [bB[0], bA[0]].map(insideDomain),
+      newBDomain = [bC[1], bB[1]].map(insideDomain),
+      newCDomain = [bA[2], bC[2]].map(insideDomain);
+
+    return [newADomain, newBDomain, newCDomain];
+  };
+
+  return ternaryPlot;
+}
+)}
+
+function _drawTernaryPlot(width,DOM,d3,axisLabels,grid,ticks){return(
+(someTernaryPlot, data) => {
+  const height = width / 2;
+  const node = DOM.svg(width, height);
+  const svg = d3.select(node);
+
+  const radius = someTernaryPlot.radius();
+
+  const chart = svg
+    .append("g")
+    .attr("transform", `translate(${width / 2} ${height / 2 + height / 4})`)
+    .attr("font-family", "sans-serif")
+    .attr("id", "chart")
+    .on("mousemove", handleMouseMove);
+
+  const defs = chart.append("defs");
+
+  const clipPath = defs
+    .append("clipPath")
+    .attr("id", "trianglePath")
+    .append("path")
+    .attr("d", someTernaryPlot.triangle());
+
+  const axisLabelsGroups = chart
+    .append("g")
+    .attr("class", "axis-labels")
+    .append("g")
+    .attr("class", "labels")
+    .attr("font-size", 16);
+
+  axisLabelsGroups.call(axisLabels, someTernaryPlot.axisLabels());
+
+  const gridLinesPaths = someTernaryPlot
+    .gridLines()
+    .map((axisGrid) => axisGrid.map(d3.line()).join(" "));
+
+  const gridGroup = chart
+    .append("g")
+    .attr("class", "grid")
+    .call(grid, gridLinesPaths);
+
+  const axisTicksGroups = chart
+    .append("g")
+    .attr("class", "ternary-ticks")
+    .attr("font-size", 10)
+    .selectAll("g")
+    .data(someTernaryPlot.ticks())
+    .join("g")
+    .attr("class", "axis-ticks")
+    .call(ticks);
+
+  const ternaryData = data.map((d) => {
+    const [x, y] = someTernaryPlot(d);
+    return { x, y, ...d };
+  });
+
+  // data
+  const dots = chart
+    .append("g")
+    .attr("class", "data")
+    .attr("clip-path", "url(#trianglePath)")
+    .selectAll("circle")
+    .data(ternaryData)
+    .join("circle")
+    .attr("r", 4)
+    .attr("cx", (d) => d.x)
+    .attr("cy", (d) => d.y)
+    .attr("fill", "#444")
+    .attr("stroke", "#ddd");
+
+  dots.append("title").text(
+    (d) => `${d.country}
+Agriculture: ${d.agriculture}
+Industry: ${d.industry}
+Service: ${d.service}`
+  );
+
+  // initial triangle
+  const trianglePath = chart
+    .append("path")
+    .attr("d", someTernaryPlot.triangle())
+    .attr("fill", "transparent")
+    .attr("stroke", "black")
+    .attr("title", "Initial untransformed triangle")
+    .attr("stroke-width", 2);
+
+  const zoom = d3.zoom().scaleExtent([1, 100]).on("zoom", zoomed);
+
+  const [tx, ty] = someTernaryPlot.translate();
+  const k = someTernaryPlot.scale();
+
+  // We need to sync d3-zoom with the tranform of the partial domains
+  const initialTransform = d3.zoomIdentity
+    .translate(tx * radius, ty * radius)
+    .scale(k);
+
+  chart.call(zoom).call(zoom.transform, initialTransform);
+
+  function zoomed({ transform }) {
+    const { x, y, k } = transform;
+
+    const tx = x / radius,
+      ty = y / radius;
+
+    // apply transform
+    someTernaryPlot.translate([tx, ty]);
+    someTernaryPlot.scale(k);
+
+    const zoomedDomains = someTernaryPlot.domainsFromVertices();
+
+    someTernaryPlot.setDomains(zoomedDomains);
+
+    // update data
+    dots
+      .attr("cx", (d) => someTernaryPlot(d)[0])
+      .attr("cy", (d) => someTernaryPlot(d)[1]);
+
+    // update gridlines and ticks
+    const gridLinesPaths = someTernaryPlot
+      .gridLines()
+      .map((axisGrid) => axisGrid.map(d3.line()).join(" "));
+
+    gridGroup.call(grid, gridLinesPaths);
+
+    axisTicksGroups.data(someTernaryPlot.ticks()).call(ticks, (d) => d);
+
+    const zoomedVertices = someTernaryPlot.vertices();
+
+    const newTrianglePath = `M${zoomedVertices[0]}L${zoomedVertices[1]}L${zoomedVertices[2]}Z`;
+  }
+
+  function handleMouseMove(d) {
+    const xy = d3.pointer(d);
+    const inverse = someTernaryPlot.invert(xy);
+
+    node.dispatchEvent(new CustomEvent("input"), { bubbles: true });
+    node.value = inverse;
+  }
+
+  node.value = 0;
+
+  return svg.node();
+}
+)}
+
+function _d3(require){return(
+require("d3@6", "d3-hexbin@0.2.2")
+)}
+
+
+function _getTranslateCorrections(getdXdY){return(
+function getTranslateCorrections(m, distance) {
+  // 🌶 distance shouldn't always have negative sign
+  if (m === 0) return [0, -distance]; // for horizontal lines
+
+  const inverseSlope = -1 / m;
+
+  return getdXdY(inverseSlope, distance);
+}
+)}
+
+function _barycentric(d3){return(
+function barycentric() {
+  const rad = Math.PI / 180;
+  // let normalizeData = true; // add option to turn normalizing off?
+
+  // accessors
+  let a = d => d[0];
+  let b = d => d[1];
+  let c = d => d[2];
+
+  const angles = [-90, 150, 30]; // angles for equilateral triangle
+  let [vA, vB, vC] = angles.map(d => [Math.cos(d * rad), Math.sin(d * rad)]); // default vertices
+
+  // Composition closure operator: https://en.wikipedia.org/wiki/Compositional_data
+  // Returns a composition version of the array where the elements are normalized to sum to 1
+  function normalize(_) {
+    const total = d3.sum(_);
+    if (total === 0) return [0, 0, 0];
+    return [_[0] / total, _[1] / total, _[2] / total];
+  }
+
+  const barycentric = function(d) {
+    const values = [a(d), b(d), c(d)];
+
+    const [dA, dB, dC] = normalize(values); // normalizeData ? normalize(d) : d;
+
+    return [
+      vA[0] * dA + vB[0] * dB + vC[0] * dC,
+      vA[1] * dA + vB[1] * dB + vC[1] * dC
+    ];
+  };
+
+  // en.wikipedia.org/wiki/Barycentric_coordinate_system#Conversion_between_barycentric_and_Cartesian_coordinates
+  barycentric.invert = function([x, y]) {
+    const [xA, yA] = vA,
+      [xB, yB] = vB,
+      [xC, yC] = vC;
+
+    const yByC = yB - yC,
+      xCxB = xC - xB,
+      xAxC = xA - xC,
+      yAyC = yA - yC,
+      yCyA = yC - yA,
+      xxC = x - xC,
+      yyC = y - yC;
+
+    const d = yByC * xAxC + xCxB * yAyC,
+      lambda1 = (yByC * xxC + xCxB * yyC) / d,
+      lambda2 = (yCyA * xxC + xAxC * yyC) / d,
+      lambda3 = 1 - lambda1 - lambda2;
+
+    return [lambda1, lambda2, lambda3];
+  };
+
+  barycentric.a = function(fn) {
+    return arguments.length ? ((a = fn), barycentric) : a;
+  };
+
+  barycentric.b = function(fn) {
+    return arguments.length ? ((b = fn), barycentric) : b;
+  };
+
+  barycentric.c = function(fn) {
+    return arguments.length ? ((c = fn), barycentric) : c;
+  };
+
+  barycentric.normalize = normalize;
+
+  barycentric.vertices = function(ABC) {
+    return arguments.length
+      ? ((vA = ABC[0]), (vB = ABC[1]), (vC = ABC[2]), barycentric)
+      : [vA, vB, vC];
+  };
+
+  return barycentric;
+}
+)}
+
+function _grid(){return(
+(g, gridLines) => g.selectAll("path")
+  .data(gridLines)
+  .join(
+    enter => enter.append("path")
+        .attr("d", d => d)
+        .attr("stroke", "#e3e3e3")
+        .attr("stroke-width", (d, i) => i & 1 ? 1 : 2),
+    update => update.attr('d', d => d)
+    // theres no exit, lines are only drawn upto 'initial' triangle bounds
+  )
+)}
+
+function _ticks(epsilon){return(
+g =>
+  g
+    .selectAll("g")
+    .data(d => d, d => d.tick)
+    .join(
+      enter => {
+        const tickGroups = enter
+          .append("g")
+          .attr("class", "tick")
+          .attr("transform", tick => `translate(${tick.position})`);
+
+        tickGroups
+          .append("text")
+          .attr("text-anchor", tick => tick.textAnchor)
+          .attr("transform", tick => `rotate(${tick.angle})`)
+          .attr(
+            "dx",
+            tick => (-tick.size - 5) * (tick.textAnchor === "start" ? -1 : 1)
+          )
+          .attr("dy", ".5em")
+          .text(tick => tick.tick);
+
+        tickGroups
+          .append("line")
+          .attr("transform", d => `rotate(${d.angle + 90})`)
+          .attr(
+            "y2",
+            tick => tick.size * (tick.textAnchor === "start" ? -1 : 1)
+          )
+          .attr("stroke", "grey");
+
+        return tickGroups;
+      },
+      update => update.attr("transform", tick => `translate(${tick.position})`),
+      exit => exit.attr("opacity", epsilon).remove()
+    )
+)}
+
+
+function _axisLabels(){return(
+(g, labels) =>
+  g
+    .selectAll("text")
+    .data(labels, d => d.label)
+    .join(
+      enter =>
+        enter
+          .append("text")
+          .attr("dy", (d, i) => (i === 2 ? "-0.5em" : ".5em"))
+          .attr(
+            "transform",
+            (label, i) => `translate(${label.position})rotate(${label.angle})`
+          )
+          .attr("text-anchor", "middle")
+          .text(label => label.label),
+      update =>
+        update.attr(
+          "transform",
+          (label, i) => `translate(${label.position})rotate(${label.angle})`
+        )
+    )
+)}
+
+
+
+function _epsilon(){return(
+1e-4
+)}
+
+
+function _getDomainLengths(){return(
+domains =>
+  new Set(
+    domains.map(domain => {
+      // round differences
+      // https://stackoverflow.com/questions/11832914/round-to-at-most-2-decimal-places-only-if-necessary
+      const d0 = Math.round((domain[0] + Number.EPSILON) * 100) / 100;
+      const d1 = Math.round((domain[1] + Number.EPSILON) * 100) / 100;
+
+      return Math.abs(d1 - d0);
+    })
+  )
+)}
+
+function _insideDomain(){return(
+n => (n > 0.999999 ? 1 : n < 0.000001 ? 0 : n)
+)}
+
+function _parallelLinesDistance(){return(
+(b1, b2, m) =>
+  ((b2 - b1) * Math.sign(b1)) / Math.sqrt(m ** 2 + 1)
+)}
+
+
+
+function _lineBetween(){return(
+([x1, y1], [x2, y2]) => t => [
+  x1 + t * (x2 - x1),
+  y1 + t * (y2 - y1)
+]
+)}
+
+function _getSlope(){return(
+([x1, y1], [x2, y2]) => (y2 - y1) / (x2 - x1)
+)}
+
+function _getdXdY(){return(
+function getdXdY(m, c) {
+  const { cos, sin, atan, sign } = Math;
+  // m = dy/dx = tan(Θ)
+  const theta = atan(m); // radians
+  const dx = c * cos(theta) * sign(theta);
+  const dy = c * sin(theta) * sign(theta);
+
+  return [dx, dy];
+}
+)}
+
+
+
+
+function _barRangeSlider(d3,width,DOM,group){return(
+function barRangeSlider(
+  initialDataArray,
+  accessorFunction,
+  aggregatorFunction,
+  paramsObject
+) {
+  const initialData = initialDataArray;
+  const accessor = accessorFunction;
+  const aggregator = aggregatorFunction;
+  const argumentsArr = [...arguments];
+  let params = argumentsArr.filter(isPlainObj)[0];
+  if (!params) {
+    params = {};
+  }
+
+  let chartHeight = 100;
+  let startSelection = 100;
+
+  params.minY = params.yScale ? 0.0001 : 0;
+  params.yScale = params.yScale || d3.scaleLinear();
+  chartHeight = params.height || chartHeight;
+  params.yTicks = params.yTicks || 4;
+  params.freezeMin = params.freezeMin || false;
+
+  const chartWidth = width - 40 - (params.marginRight || 0);
+
+  var accessorFunc = (d) => d;
+  if (initialData[0].value != null) {
+    accessorFunc = (d) => d.value;
+  }
+  if (typeof accessor == "function") {
+    accessorFunc = accessor;
+  }
+  const dataFinal = initialData; //
+  const isDate =
+    Object.prototype.toString.call(accessor(dataFinal[0])) === "[object Date]";
+  var dateExtent, dateScale, scaleTime, dateRangesCount, dateRanges, scaleTime;
+  if (isDate) {
+    dateExtent = d3.extent(dataFinal.map(accessorFunc));
+    dateRangesCount = Math.round(width / 5);
+    dateScale = d3.scaleTime().domain(dateExtent).range([0, dateRangesCount]);
+    scaleTime = d3.scaleTime().domain(dateExtent).range([0, chartWidth]);
+    dateRanges = d3
+      .range(dateRangesCount)
+      .map((d) => [dateScale.invert(d), dateScale.invert(d + 1)]);
+  }
+
+  d3.selection.prototype.patternify = function (params) {
+    var container = this;
+    var selector = params.selector;
+    var elementTag = params.tag;
+    var data = params.data || [selector];
+
+    // Pattern in action
+    var selection = container.selectAll("." + selector).data(data, (d, i) => {
+      if (typeof d === "object") {
+        if (d.id) {
+          return d.id;
+        }
+      }
+      return i;
+    });
+    selection.exit().remove();
+    selection = selection.enter().append(elementTag).merge(selection);
+    selection.attr("class", selector);
+    return selection;
+  };
+
+  const handlerWidth = 2,
+    handlerFill = "#E1E1E3",
+    middleHandlerWidth = 10,
+    middleHandlerStroke = "#8E8E8E",
+    middleHandlerFill = "#EFF4F7";
+
+  const svg = d3
+    .select(DOM.svg(chartWidth, chartHeight))
+    .style("overflow", "visible");
+
+  const chart = svg
+    .append("g")
+    .attr("transform", `translate(${params.marginLeft ?? 30},5)`);
+
+  const groupedInitial = group(dataFinal)
+    .by((d, i) => {
+      const field = accessorFunc(d);
+      if (isDate) {
+        return Math.round(dateScale(field));
+      }
+      return field;
+    })
+    .orderBy((d) => d.key)
+    .run();
+
+  const grouped = groupedInitial.map((d) =>
+    Object.assign(d, {
+      value: typeof aggregator == "function" ? aggregator(d) : d.values.length
+    })
+  );
+
+  const values = grouped.map((d) => d.value);
+  const min = d3.min(values);
+  const max = d3.max(values);
+  const maxX = grouped[grouped.length - 1].key;
+  const minX = grouped[0].key;
+
+  var minDiff = d3.min(grouped, (d, i, arr) => {
+    if (!i) return Infinity;
+    return d.key - arr[i - 1].key;
+  });
+
+  let eachBarWidth = chartWidth / minDiff / (maxX - minX);
+
+  if (eachBarWidth > 20) {
+    eachBarWidth = 20;
+  }
+
+  if (minDiff < 1) {
+    eachBarWidth = eachBarWidth * minDiff;
+  }
+
+  if (eachBarWidth < 1) {
+    eachBarWidth = 1;
+  }
+
+  const scale = params.yScale
+    .domain([params.minY, max])
+    .range([0, chartHeight - 25]);
+  const scaleY = scale
+    .copy()
+    .domain([max, params.minY])
+    .range([0, chartHeight - 25]);
+
+  const scaleX = d3.scaleLinear().domain([minX, maxX]).range([0, chartWidth]);
+  var axis = d3.axisBottom(scaleX);
+  if (isDate) {
+    axis = d3.axisBottom(scaleTime);
+  }
+  const axisY = d3
+    .axisLeft(scaleY)
+    .tickSize(-chartWidth - 20)
+    .ticks(max == 1 ? 1 : params.yTicks)
+    .tickFormat(d3.format(".2s"));
+
+  const bars = chart
+    .selectAll(".bar")
+    .data(grouped)
+    .enter()
+    .append("rect")
+    .attr("class", "bar")
+    .attr("width", eachBarWidth)
+    .attr("height", (d) => scale(d.value))
+    .attr("fill", "steelblue")
+    .attr("y", (d) => -scale(d.value) + (chartHeight - 25))
+    .attr("x", (d, i) => scaleX(d.key) - eachBarWidth / 2)
+    .attr("opacity", 0.9);
+
+  const xAxisWrapper = chart
+    .append("g")
+    .attr("transform", `translate(${0},${chartHeight - 25})`)
+    .call(axis);
+
+  const yAxisWrapper = chart
+    .append("g")
+    .attr("transform", `translate(${-10},${0})`)
+    .call(axisY);
+
+  const brush = chart
+    .append("g")
+    .attr("class", "brush")
+    .call(
+      d3
+        .brushX()
+        .extent([
+          [0, 0],
+          [chartWidth, chartHeight]
+        ])
+        .on("start", brushStarted)
+        .on("end", brushEnded)
+        .on("brush", brushed)
+    );
+
+  chart.selectAll(".selection").attr("fill-opacity", 0.1);
+
+  var handle = brush
+    .patternify({
+      tag: "g",
+      selector: "custom-handle",
+      data: [
+        {
+          left: true
+        },
+        {
+          left: false
+        }
+      ]
+    })
+    .attr("cursor", "ew-resize")
+    .attr("pointer-events", "all");
+
+  handle
+    .patternify({
+      tag: "rect",
+      selector: "custom-handle-rect",
+      data: (d) => [d]
+    })
+    .attr("width", handlerWidth)
+    .attr("height", 100)
+    .attr("fill", handlerFill)
+    .attr("stroke", handlerFill)
+    .attr("y", -50)
+    .attr("pointer-events", "none");
+
+  handle
+    .patternify({
+      tag: "rect",
+      selector: "custom-handle-rect-middle",
+      data: (d) => [d]
+    })
+    .attr("width", middleHandlerWidth)
+    .attr("height", 30)
+    .attr("fill", middleHandlerFill)
+    .attr("stroke", middleHandlerStroke)
+    .attr("y", -16)
+    .attr("x", -middleHandlerWidth / 4)
+    .attr("pointer-events", "none")
+    .attr("rx", 3);
+
+  handle
+    .patternify({
+      tag: "rect",
+      selector: "custom-handle-rect-line-left",
+      data: (d) => [d]
+    })
+    .attr("width", 0.7)
+    .attr("height", 20)
+    .attr("fill", middleHandlerStroke)
+    .attr("stroke", middleHandlerStroke)
+    .attr("y", -100 / 6 + 5)
+    .attr("x", -middleHandlerWidth / 4 + 3)
+    .attr("pointer-events", "none");
+
+  handle
+    .patternify({
+      tag: "rect",
+      selector: "custom-handle-rect-line-right",
+      data: (d) => [d]
+    })
+    .attr("width", 0.7)
+    .attr("height", 20)
+    .attr("fill", middleHandlerStroke)
+    .attr("stroke", middleHandlerStroke)
+    .attr("y", -100 / 6 + 5)
+    .attr("x", -middleHandlerWidth / 4 + middleHandlerWidth - 3)
+    .attr("pointer-events", "none");
+
+  handle.attr("display", "none");
+
+  function brushStarted() {
+    if (d3.event.selection) {
+      startSelection = d3.event.selection[0];
+    }
+  }
+
+  function brushEnded() {
+    console.log("ended");
+    if (!d3.event.selection) {
+      handle.attr("display", "none");
+
+      output({
+        range: [minX, maxX]
+      });
+      return;
+    }
+    if (d3.event.sourceEvent.type === "brush") return;
+
+    var d0 = d3.event.selection.map(scaleX.invert),
+      d1 = d0.map(d3.timeDay.round);
+
+    if (d1[0] >= d1[1]) {
+      d1[0] = d3.timeDay.floor(d0[0]);
+      d1[1] = d3.timeDay.offset(d1[0]);
+    }
+    console.log(d0, d1);
+  }
+
+  function brushed(d) {
+    if (d3.event.sourceEvent.type === "brush") return;
+    console.log("brushed", d3.event.selection);
+
+    if (params.freezeMin) {
+      if (d3.event.selection[0] < startSelection) {
+        d3.event.selection[1] = Math.min(
+          d3.event.selection[0],
+          d3.event.selection[1]
+        );
+      }
+      if (d3.event.selection[0] >= startSelection) {
+        d3.event.selection[1] = Math.max(
+          d3.event.selection[0],
+          d3.event.selection[1]
+        );
+      }
+
+      d3.event.selection[0] = 0;
+      //    console.log(d3.event.selection)
+
+      d3.select(this).call(d3.event.target.move, d3.event.selection);
+    }
+
+    var d0 = d3.event.selection.map(scaleX.invert);
+    const s = d3.event.selection;
+    console.log(s);
+
+    handle.attr("display", null).attr("transform", function (d, i) {
+      console.log(d);
+      return "translate(" + (s[i] - 2) + "," + chartHeight / 2 + ")";
+    });
+    output({
+      range: d0
+    });
+  }
+
+  yAxisWrapper.selectAll(".domain").remove();
+  xAxisWrapper.selectAll(".domain").attr("opacity", 0.1);
+
+  chart.selectAll(".tick line").attr("opacity", 0.1);
+
+  function isPlainObj(o) {
+    return typeof o == "object" && o.constructor == Object;
+  }
+
+  function output(value) {
+    const node = svg.node();
+    node.value = value;
+    node.value.data = getData(node.value.range);
+    if (isDate) {
+      node.value.range = value.range.map((d) => dateScale.invert(d));
+    }
+    node.dispatchEvent(new CustomEvent("input"));
+  }
+
+  function getData(range) {
+    const dataBars = bars
+      .attr("fill", "steelblue")
+      .filter((d) => {
+        return d.key >= range[0] && d.key <= range[1];
+      })
+      .attr("fill", "red")
+      .nodes()
+      .map((d) => d.__data__)
+      .map((d) => d.values)
+      .reduce((a, b) => a.concat(b), []);
+
+    return dataBars;
+  }
+
+  const returnValue = Object.assign(svg.node(), {
+    value: {
+      range: [minX, maxX],
+      data: initialData
+    }
+  });
+
+  if (isDate) {
+    returnValue.value.range = returnValue.value.range.map((d) =>
+      dateScale.invert(d)
+    );
+  }
+
+  return returnValue;
+}
+)}
+
+
+function _d3(require){return(
+require('d3@v5')
+)}
+
+
+
+
+
+
+
+
+
+export default function define(runtime, observer) {
+  const main = runtime.module();
+  function toString() { return this.url; }
+  const fileAttachments = new Map([
+    ["ternary_data@4.tsv", {url: new URL("ternary_data.tsv", import.meta.url), mimeType: "text/tab-separated-values", toString}]
+  ]);
+  main.builtin("FileAttachment", runtime.fileAttachments(name => fileAttachments.get(name)));
+  //main.variable(observer()).define(["md"], _1);
+  main.variable(observer("viewof time_scale")).define("viewof time_scale", ["Inputs"], _time_scale);
+  main.variable(observer("time_scale")).define("time_scale", ["Generators", "viewof time_scale"], (G, _) => G.input(_));
+  main.variable(observer("drawScatterTernaryPlot")).define("drawScatterTernaryPlot", ["width","DOM","d3","scatterTernaryPlot","axisLabels","grid","ticks","data","dot_color","time_threshold","col"], _drawScatterTernaryPlot);
+  //main.variable(observer()).define(["md"], _4);
+  main.variable(observer("viewof time_threshold")).define("viewof time_threshold", ["rangeSlider","data"], _time_threshold);
+  main.variable(observer("time_threshold")).define("time_threshold", ["Generators", "viewof time_threshold"], (G, _) => G.input(_));
+  //main.variable(observer()).define(["md"], _6);
+  //main.variable(observer()).define(["md"], _7);
+  //main.variable(observer()).define(["md"], _8);
+  main.variable(observer("colorHexbinTernaryPlot")).define("colorHexbinTernaryPlot", ["width","DOM","d3","hexBinTernaryPlot","axisLabels","grid","ticks","bins","hexbin","hex_color","col"], _colorHexbinTernaryPlot);
+  main.variable(observer("viewof hexagonRadius")).define("viewof hexagonRadius", ["Inputs"], _hexagonRadius);
+  main.variable(observer("hexagonRadius")).define("hexagonRadius", ["Generators", "viewof hexagonRadius"], (G, _) => G.input(_));
+  //main.variable(observer()).define(["md"], _11);
+  main.variable(observer("hex_color")).define("hex_color", ["d3","bins"], _hex_color);
+  main.variable(observer("dot_color")).define("dot_color", ["d3","data"], _dot_color);
+  main.variable(observer("normalBarycentric")).define("normalBarycentric", ["barycentric","col"], _normalBarycentric);
+  main.variable(observer("scatterTernaryPlot")).define("scatterTernaryPlot", ["ternaryPlot","normalBarycentric","width","labels"], _scatterTernaryPlot);
+  main.variable(observer("hexBinTernaryPlot")).define("hexBinTernaryPlot", ["ternaryPlot","normalBarycentric","labels"], _hexBinTernaryPlot);
+  main.variable(observer("hexbin")).define("hexbin", ["d3","hexagonRadius","width"], _hexbin);
+  main.variable(observer("bins")).define("bins", ["hexbin","xydata"], _bins);
+  main.variable(observer("col")).define("col", ["time_scale"], _col);
+  main.variable(observer("data")).define("data", ["FileAttachment"], _data);
+  main.variable(observer("xydata")).define("xydata", ["data","hexBinTernaryPlot"], _xydata);
+  main.variable(observer("labels")).define("labels", _labels);
+  main.variable(observer("ternaryPlot")).define("ternaryPlot", ["width","lineBetween","d3","getDomainLengths","getSlope","parallelLinesDistance","epsilon","getTranslateCorrections","insideDomain"], _ternaryPlot);
+  main.variable(observer("drawTernaryPlot")).define("drawTernaryPlot", ["width","DOM","d3","axisLabels","grid","ticks"], _drawTernaryPlot);
+  const child1 = runtime.module(define1);
+  main.import("rangeSlider", child1);
+  
+  //main.variable(observer("d3")).define("d3", ["require"], _d3);
+
+
+  main.variable(observer("barRangeSlider")).define("barRangeSlider", ["d3","width","DOM","group"], _barRangeSlider);
+
+  main.variable(observer("d3")).define("d3", ["require"], _d3);
+
+
+
+
+  
+  main.variable(observer("getTranslateCorrections")).define("getTranslateCorrections", ["getdXdY"], _getTranslateCorrections);
+  main.variable(observer("barycentric")).define("barycentric", ["d3"], _barycentric);
+  main.variable(observer("grid")).define("grid", _grid);
+  main.variable(observer("ticks")).define("ticks", ["epsilon"], _ticks);
+  main.variable(observer("axisLabels")).define("axisLabels", _axisLabels);
+  main.variable(observer("epsilon")).define("epsilon", _epsilon);
+  main.variable(observer("getDomainLengths")).define("getDomainLengths", _getDomainLengths);
+  main.variable(observer("insideDomain")).define("insideDomain", _insideDomain);
+  main.variable(observer("parallelLinesDistance")).define("parallelLinesDistance", _parallelLinesDistance);
+  main.variable(observer("lineBetween")).define("lineBetween", _lineBetween);
+  main.variable(observer("getSlope")).define("getSlope", _getSlope);
+  main.variable(observer("getdXdY")).define("getdXdY", _getdXdY);
+
+  return main;
+}
+
+</script>
